@@ -2,8 +2,6 @@
  * @file IoTManager.h
  * @brief 定义了 IoTManager 类，用于管理物联网设备的连接和数据通信。
  * 
- * This file defines the IoTManager class, which handles connection and data communication
- * for IoT devices.
  */
 
 #ifndef IOTMANAGER_H

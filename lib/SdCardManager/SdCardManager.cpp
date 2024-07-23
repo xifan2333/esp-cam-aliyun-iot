@@ -1,5 +1,12 @@
 #include "SdCardManager.h"
 
+/**
+ * ### 初始化SD卡管理器
+ * 
+ * 此函数用于初始化SD卡管理器，并挂载SD卡。如果挂载失败或者SD卡类型错误，将会记录错误日志。
+ * 
+ *  在调用其他SD卡管理器函数之前，需要先调用此函数进行初始化。
+ */
 void SdCardManager::init()
 {
     if (!SD_MMC.begin())
@@ -17,6 +24,13 @@ void SdCardManager::init()
     logger.info("内存卡挂载成功", "sdcard");
 }
 
+/**
+ * ### 检查目录是否存在，如果不存在则创建目录。
+ * 
+ * #### 参数
+ * 
+ * - `dir` 目录路径
+ */
 void SdCardManager::checkDirExists(const String &dir)
 {
     if (!SD_MMC.exists(dir))
@@ -33,6 +47,13 @@ void SdCardManager::checkDirExists(const String &dir)
     }
 }
 
+/**
+ * ### 保存图像到SD卡。
+ * 
+ * #### 参数
+ * 
+ * - `fb` 图像帧缓冲区
+ */
 void SdCardManager::saveImage(camera_fb_t *fb)
 {
     if (!fb)
@@ -41,9 +62,9 @@ void SdCardManager::saveImage(camera_fb_t *fb)
         return;
     }
 
-    checkDirExists("/images");
+    checkDirExists("/pictures");
 
-    String filename = "/images/image_" + String(millis()) + ".jpg";
+    String filename = "/pictures/image_" + String(timeManager.getFormattedDateAndTime())+ ".jpg";
 
     File file = SD_MMC.open(filename, FILE_WRITE);
     if (!file)
@@ -52,9 +73,9 @@ void SdCardManager::saveImage(camera_fb_t *fb)
         return;
     }
 
-    file.write(fb->buf, fb->len);
+    u_int8_t written = file.write(fb->buf, fb->len);
 
-    if (file.size() != fb->len)
+    if (written != fb->len)
     {
         logger.error("写入文件 " + filename + " 时发生错误", "sdcard");
     }

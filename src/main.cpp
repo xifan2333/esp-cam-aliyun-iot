@@ -44,5 +44,6 @@ void loop()
   camera_fb_t*  image = camera.capture();
   sdcardManager.saveImage(image);
   String imageBase64 = base64.encode(image->buf, image->len);
+  camera.returnFrameBuffer(image);
   delay(1000);
 }
