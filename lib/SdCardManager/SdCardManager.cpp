@@ -64,7 +64,7 @@ void SdCardManager::saveImage(camera_fb_t *fb)
 
     checkDirExists("/pictures");
 
-    String filename = "/pictures/image_" + String(timeManager.getFormattedDateAndTime())+ ".jpg";
+    String filename = "/pictures/" + String(timeManager.getFormattedDateAndTime())+ ".jpg";
 
     File file = SD_MMC.open(filename, FILE_WRITE);
     if (!file)
