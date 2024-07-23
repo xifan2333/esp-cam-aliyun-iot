@@ -1,7 +1,7 @@
 
 /**
  * @file TimeManager.cpp
- *  @author 稀饭
+ * @author 稀饭
  * @brief 时间管理器类的源文件
  */
 #include "TimeManager.h"
@@ -24,7 +24,7 @@ void TimeManager::updateTime() {
  * 
  * - int：当前时间的时间戳
  */
-int TimeManager::getTimeStamp() {
+int TimeManager::getTimestamp() {
     return time(NULL);
 }
 

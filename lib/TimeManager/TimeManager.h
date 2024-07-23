@@ -38,7 +38,7 @@ extern Logger logger; ///< 外部定义的日志记录器对象
  * #### 方法
  * 
  * - `updateTime()`：更新时间信息
- * - `getTimeStamp()`：获取当前时间戳
+ * - `getTimestamp()`：获取当前时间戳
  * - `getYear()`：获取当前年份
  * - `getMonth()`：获取当前月份
  * - `getWeekDay()`：获取当前星期几
@@ -82,7 +82,7 @@ public:
      * 
      * - int：当前时间的时间戳
      */
-    int getTimeStamp();
+    int getTimestamp();
 
     /**
      * ### 获取当前年份

@@ -73,7 +73,7 @@ void SdCardManager::saveImage(camera_fb_t *fb)
         return;
     }
 
-    u_int8_t written = file.write(fb->buf, fb->len);
+    size_t written = file.write(fb->buf, fb->len);
 
     if (written != fb->len)
     {
