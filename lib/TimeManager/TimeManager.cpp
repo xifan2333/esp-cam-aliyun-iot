@@ -28,7 +28,7 @@ void TimeManager::updateTime()
     {
         logger.info("等待时间同步...", "Time");
         checkCount++; // 增加尝试次数
-        delay(100);   // 等待0.1秒
+        delay(1000);   // 等待1秒
         syncStatus = sntp_get_sync_status();
     }
 
@@ -56,10 +56,10 @@ void TimeManager::updateTime()
  *
  * - int：当前时间的时间戳
  */
-int TimeManager::getTimestamp()
+int_fast64_t TimeManager::getTimestamp()
 {
     time_t now = time(nullptr);
-    timestamp = static_cast<int>(now);
+    timestamp = static_cast<int_fast64_t>(now);
     return timestamp * 1000;
 }
 
