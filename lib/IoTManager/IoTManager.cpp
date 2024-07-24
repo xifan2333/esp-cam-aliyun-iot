@@ -91,8 +91,44 @@ bool IoTManager::connect()
     }
     else
     {
-        logger.error("MQTT连接失败", "MQTT");
-        logger.info("MQTT状态码: " + String(mqttClient.state()), "MQTT");
+        String errorMsg;
+        switch (mqttClient.state())
+        {
+            case -4:
+                errorMsg = "MQTT连接失败: 没有可用的网络";
+                break;
+            case -3:
+                errorMsg = "MQTT连接失败: DNS解析失败";
+                break;
+            case -2:
+                errorMsg = "MQTT连接失败: 连接被拒绝";
+                break;
+            case -1:
+                errorMsg = "MQTT连接失败: 客户端配置错误";
+                break;
+            case 0:
+                errorMsg = "MQTT连接失败: 连接被拒绝(未知原因)";
+                break;
+            case 1:
+                errorMsg = "MQTT连接失败: 连接被拒绝(不支持的协议版本)";
+                break;
+            case 2:
+                errorMsg = "MQTT连接失败: 连接被拒绝(非法客户端标识符)";
+                break;
+            case 3:
+                errorMsg = "MQTT连接失败: 连接被拒绝(服务器不可用)";
+                break;
+            case 4:
+                errorMsg = "MQTT连接失败: 连接被拒绝(无效用户名或密码)";
+                break;
+            case 5:
+                errorMsg = "MQTT连接失败: 连接被拒绝(未授权)";
+                break;
+            default:
+                errorMsg = "MQTT连接失败: 未知错误(" + String(mqttClient.state()) + ")";
+                break;
+        }
+        logger.error(errorMsg, "MQTT");
     }
     return mqttClient.connected();
 }
