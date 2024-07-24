@@ -17,7 +17,7 @@ WiFiClient wifiClient;
 PubSubClient mqttClient;
 SdCardManager sdcardManager;
 TimeManager timeManager;
-WifiManager wifiManager("30","12345678");
+WifiManager wifiManager("Tenda_2344E0","lvjiang516116");
 IoTManager iotManager("k1jf1H5lHO8","ESPcam","a5c9dadff635870d067233b08ab66c3e","iot-06z00j81cbwhmp9.mqtt.iothub.aliyuncs.com",1883);
 
 
