@@ -136,16 +136,22 @@ bool IoTManager::connect()
  * ### 检查 MQTT 连接状态
  *
  * 检查当前 MQTT 连接状态，若未连接则尝试重新连接。
+ * 
+ * ### 返回值
+ * 
+ * - bool：连接成功返回 true，否则返回 false
  */
-void IoTManager::checkConnection()
+bool IoTManager::checkConnection()
 {
-    bool connected = mqttClient.connected();
-    if (!connected)
+    return mqttClient.connected();
+}
+
+void IoTManager::loop(){
+
+    if (!mqttClient.connected())
     {
+        logger.info("MQTT连接断开，尝试重新连接……", "MQTT");
         connect();
     }
-    else
-    {
-        mqttClient.loop();
-    }
+    mqttClient.loop();
 }

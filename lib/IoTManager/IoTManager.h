@@ -109,7 +109,7 @@ public:
      * 检查当前 MQTT 连接状态，若未连接则尝试重新连接。
      * 如果连接成功，调用 MQTT 客户端的 loop 方法以保持连接。
      */
-    void checkConnection();
+    bool checkConnection();
 
     /**
      * ### 发送数据到 MQTT 服务器
@@ -122,6 +122,13 @@ public:
      * - `value`：数据的值
      */
     void sendData(String key, String value);
+
+    /**
+     * ### MQTT 客户端循环
+     * 
+     * 如果断开则重连，保持 MQTT 客户端的连接状态。
+     */
+    void loop();
 };
 
 #endif // IOTMANAGER_H

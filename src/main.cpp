@@ -7,9 +7,10 @@
 #include "Camera.h"
 #include "Base64.h"
 #include "Logger.h"
+#include <Ticker.h>
 
 
-
+Ticker ticker;
 Camera camera;
 Base64 base64;
 Logger logger;
@@ -32,11 +33,13 @@ void setup()
     timeManager.updateTime();
     String timestamp = String(timeManager.getTimestamp());
     iotManager.connect();
+    ticker.attach(10, []() { iotManager.loop(); });
   }else{
     logger.error("WIFI连接失败","WiFi");
   }
   sdcardManager.init();
   camera.init();
+
 }
 
 
