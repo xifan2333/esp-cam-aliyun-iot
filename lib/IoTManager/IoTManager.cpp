@@ -25,7 +25,9 @@ IoTManager::IoTManager(String productKey, String deviceName, String deviceSecret
     this->deviceSecret = deviceSecret;
     this->brifeId = productKey + "." + deviceName;
     String timestamp = String(timeManager.getTimestamp());
+    logger.info("时间戳: " + timestamp, "IoT");
     this->clientId = brifeId + "|securemode=2,signmethod=hmacsha256,timestamp=" + timestamp + "|";
+    logger.info("客户端 ID: " + clientId, "IoT");
     this->username = deviceName + "&" + productKey;
     String plainText = "clientId" + brifeId + "deviceName" + deviceName + "productKey" + productKey + "timestamp" + timestamp;
     this->password = sign(plainText, deviceSecret);
