@@ -31,8 +31,6 @@ void setup()
   {
     timeManager.updateTime();
     String timestamp = String(timeManager.getTimestamp());
-    logger.info("当前时间戳为："+timestamp,"Time");
-
     iotManager.connect();
   }else{
     logger.error("WIFI连接失败","WiFi");
