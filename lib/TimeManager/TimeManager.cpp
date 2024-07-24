@@ -33,12 +33,15 @@ void TimeManager::updateTime()
     }
 
     // 检查是否成功同步时间
-    if (syncStatus == SNTP_SYNC_STATUS_COMPLETED) {
+    if (syncStatus == SNTP_SYNC_STATUS_COMPLETED)
+    {
         sntp_stop();
         String date = getFormattedDate();
         String time = getFormattedTime();
         logger.info("更新时间成功，当前时间：" + date + " " + time, "Time");
-    } else {
+    }
+    else
+    {
         // 未能在10次尝试后同步时间
         logger.error("更新时间失败，超过最大尝试次数。", "Time");
     }
@@ -57,7 +60,7 @@ int TimeManager::getTimestamp()
 {
     time_t now = time(nullptr);
     timestamp = static_cast<int>(now);
-    return timestamp;
+    return timestamp * 1000;
 }
 
 /**
