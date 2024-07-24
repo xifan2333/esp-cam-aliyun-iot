@@ -5,7 +5,22 @@
  * @brief 时间管理器类的源文件
  */
 #include "TimeManager.h"
+#include <esp_sntp.h>
 
+
+bool TimeManager::timeSynchronized = false;
+/**
+ * ### 时间同步的回调函数
+ * 
+ * #### 参数
+ * 
+ * 
+ */
+void TimeManager::timeSyncCallback(struct timeval *tv)
+{
+   
+    TimeManager::timeSynchronized = true;
+}
 /**
  * ### 更新时间信息
  *
@@ -13,27 +28,26 @@
  */
 void TimeManager::updateTime()
 {
+    sntp_set_time_sync_notification_cb(TimeManager::timeSyncCallback);
     configTime(3600 * 8, 0, "pool.ntp.org");
     int checkCount = 0;
 
     // 尝试最多10次等待时间同步
-    while (!time(nullptr) && checkCount < 10)
+    while (!timeSynchronized && checkCount < 10)
     {
-        delay(1000); // 等待1秒
+         // 等待1秒
         logger.info("等待时间同步...", "Time");
         checkCount++; // 增加尝试次数
+        delay(1000);
     }
 
     // 检查是否成功同步时间
-    if (time(nullptr))
-    {
+    if (timeSynchronized) {
         // 成功获取时间
         String date = getFormattedDate();
         String time = getFormattedTime();
         logger.info("更新时间成功，当前时间：" + date + " " + time, "Time");
-    }
-    else
-    {
+    } else {
         // 未能在10次尝试后同步时间
         logger.error("更新时间失败，超过最大尝试次数。", "Time");
     }

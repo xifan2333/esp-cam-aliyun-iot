@@ -77,6 +77,7 @@ String IoTManager::sign(String plaintext, String deviceSecret)
 bool IoTManager::connect()
 {
     String timestamp = String(timeManager.getTimestamp());
+    logger.info("当前时间戳：" + timestamp, "MQTT");
     this->clientId = brifeId + "|securemode=2,signmethod=hmacsha256,timestamp=" + timestamp + "|";
     String plainText = "clientId" + brifeId + "deviceName" + deviceName + "productKey" + productKey + "timestamp" + timestamp;
     this->password = sign(plainText, deviceSecret);
