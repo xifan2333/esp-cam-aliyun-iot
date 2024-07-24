@@ -56,11 +56,11 @@ void TimeManager::updateTime()
  *
  * - int：当前时间的时间戳
  */
-int_fast64_t TimeManager::getTimestamp()
+uint_fast64_t TimeManager::getTimestamp()
 {
     time_t now = time(nullptr);
     timestamp = static_cast<int_fast64_t>(now);
-    return timestamp * 1000;
+    return timestamp * 1000LL;
 }
 
 /**

@@ -81,7 +81,7 @@ public:
      *
      * - int：当前时间的时间戳
      */
-    int_fast64_t getTimestamp();
+    uint_fast64_t getTimestamp();
 
     /**
      * ### 获取当前年份
