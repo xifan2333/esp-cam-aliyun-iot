@@ -58,9 +58,11 @@ void TimeManager::updateTime()
  */
 uint_fast64_t TimeManager::getTimestamp()
 {
-    time_t now = time(nullptr);
-    timestamp = static_cast<int_fast64_t>(now);
-    return timestamp * 1000LL;
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    unsigned long long timestamp =
+        (unsigned long long)(tv.tv_sec) * 1000 + (unsigned long long)(tv.tv_usec) / 1000;
+    return timestamp;
 }
 
 /**
