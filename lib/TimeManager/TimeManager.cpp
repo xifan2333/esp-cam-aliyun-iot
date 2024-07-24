@@ -14,12 +14,13 @@
 void TimeManager::updateTime()
 {
     configTime(3600 * 8, 0, "pool.ntp.org");
-    while (!time(nullptr))
+    int checkCount = 0;
+    while (!time(nullptr) && checkCount < 10)
     {
         delay(1000);
         logger.info("等待时间同步...", "Time");
-    }
-    String date = getFormattedDate();
+        checkCount++;
+    }  String date = getFormattedDate();
     String time = getFormattedTime();
     logger.info("更新时间成功，当前时间：" + date + " " + time, "Time");
 }
