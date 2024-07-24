@@ -24,13 +24,7 @@ IoTManager::IoTManager(String productKey, String deviceName, String deviceSecret
     this->deviceName = deviceName;
     this->deviceSecret = deviceSecret;
     this->brifeId = productKey + "." + deviceName;
-    String timestamp = String(timeManager.getTimestamp());
-    logger.info("时间戳: " + timestamp, "IoT");
-    this->clientId = brifeId + "|securemode=2,signmethod=hmacsha256,timestamp=" + timestamp + "|";
-    logger.info("客户端 ID: " + clientId, "IoT");
     this->username = deviceName + "&" + productKey;
-    String plainText = "clientId" + brifeId + "deviceName" + deviceName + "productKey" + productKey + "timestamp" + timestamp;
-    this->password = sign(plainText, deviceSecret);
     this->hostUrl = hostUrl;
     this->port = port;
 }
@@ -82,6 +76,10 @@ String IoTManager::sign(String plaintext, String deviceSecret)
  */
 bool IoTManager::connect()
 {
+    String timestamp = String(timeManager.getTimestamp());
+    this->clientId = brifeId + "|securemode=2,signmethod=hmacsha256,timestamp=" + timestamp + "|";
+    String plainText = "clientId" + brifeId + "deviceName" + deviceName + "productKey" + productKey + "timestamp" + timestamp;
+    this->password = sign(plainText, deviceSecret);
     mqttClient.setServer(hostUrl.c_str(), port);
     mqttClient.setClient(wifiClient);
     mqttClient.connect(clientId.c_str(), username.c_str(), password.c_str());
