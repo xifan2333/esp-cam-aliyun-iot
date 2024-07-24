@@ -10,7 +10,7 @@
 #include <Arduino.h>
 #include <time.h>
 #include "Logger.h"
-
+#include "esp_sntp.h"
 extern Logger logger; ///< 外部定义的日志记录器对象
 
 /**
@@ -203,16 +203,6 @@ public:
      * - String：格式化的日期和时间字符串，如果获取失败返回空字符串
      */
     String getFormattedDateAndTime();
-
-    /**
-     * ### 时间同步回调函数
-     *
-     * #### 参数
-     *
-     * - `tv`：同步的时间
-     */
-    static void timeSyncCallback(struct timeval *tv);
-    static bool timeSynchronized;       ///< 时间是否已同步标志
 };
 
 #endif // TIMEMANAGER_H

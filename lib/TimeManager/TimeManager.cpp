@@ -5,22 +5,7 @@
  * @brief 时间管理器类的源文件
  */
 #include "TimeManager.h"
-#include <esp_sntp.h>
 
-
-bool TimeManager::timeSynchronized = false;
-/**
- * ### 时间同步的回调函数
- * 
- * #### 参数
- * 
- * 
- */
-void TimeManager::timeSyncCallback(struct timeval *tv)
-{
-   
-    TimeManager::timeSynchronized = true;
-}
 /**
  * ### 更新时间信息
  *
@@ -28,22 +13,28 @@ void TimeManager::timeSyncCallback(struct timeval *tv)
  */
 void TimeManager::updateTime()
 {
-    sntp_set_time_sync_notification_cb(TimeManager::timeSyncCallback);
-    configTime(3600 * 8, 0, "pool.ntp.org");
-    int checkCount = 0;
 
-    // 尝试最多10次等待时间同步
-    while (!timeSynchronized && checkCount < 10)
+    configTime(3600 * 8, 0, "ntp1.ntsc.ac.cn", "time1.aliyun.com", "ntp.tencent.com");
+
+    // 开始NTP时间同步
+    sntp_set_sync_mode(SNTP_SYNC_MODE_IMMED);
+    sntp_init();
+
+    int checkCount = 0;
+    sntp_sync_status_t syncStatus = sntp_get_sync_status();
+
+    // 尝试最多100次等待时间同步，每次等待0.1秒，总等待时间10秒
+    while (syncStatus != SNTP_SYNC_STATUS_COMPLETED && checkCount < 100)
     {
-         // 等待1秒
         logger.info("等待时间同步...", "Time");
         checkCount++; // 增加尝试次数
-        delay(1000);
+        delay(100);   // 等待0.1秒
+        syncStatus = sntp_get_sync_status();
     }
 
     // 检查是否成功同步时间
-    if (timeSynchronized) {
-        // 成功获取时间
+    if (syncStatus == SNTP_SYNC_STATUS_COMPLETED) {
+        sntp_stop();
         String date = getFormattedDate();
         String time = getFormattedTime();
         logger.info("更新时间成功，当前时间：" + date + " " + time, "Time");
