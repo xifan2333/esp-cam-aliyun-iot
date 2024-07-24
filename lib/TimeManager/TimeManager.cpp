@@ -15,26 +15,28 @@ void TimeManager::updateTime()
 {
     configTime(3600 * 8, 0, "pool.ntp.org");
     int checkCount = 0;
-    // 初始化尝试次数
-int checkCount = 0;
 
-// 尝试最多10次等待时间同步
-while (!time(nullptr) && checkCount < 10) {
-    delay(1000); // 等待1秒
-    logger.info("等待时间同步...", "Time");
-    checkCount++; // 增加尝试次数
-}
+    // 尝试最多10次等待时间同步
+    while (!time(nullptr) && checkCount < 10)
+    {
+        delay(1000); // 等待1秒
+        logger.info("等待时间同步...", "Time");
+        checkCount++; // 增加尝试次数
+    }
 
-// 检查是否成功同步时间
-if (time(nullptr)) {
-    // 成功获取时间
-    String date = getFormattedDate();
-    String time = getFormattedTime();
-    logger.info("更新时间成功，当前时间：" + date + " " + time, "Time");
-} else {
-    // 未能在10次尝试后同步时间
-    logger.error("更新时间失败，超过最大尝试次数。", "Time");
-}
+    // 检查是否成功同步时间
+    if (time(nullptr))
+    {
+        // 成功获取时间
+        String date = getFormattedDate();
+        String time = getFormattedTime();
+        logger.info("更新时间成功，当前时间：" + date + " " + time, "Time");
+    }
+    else
+    {
+        // 未能在10次尝试后同步时间
+        logger.error("更新时间失败，超过最大尝试次数。", "Time");
+    }
 }
 
 /**
