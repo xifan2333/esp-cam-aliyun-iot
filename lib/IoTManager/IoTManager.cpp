@@ -1,5 +1,7 @@
 #include "IoTManager.h"
 
+IoTManager* IoTManager::instance = nullptr;
+
 IoTManager::IoTManager(String productKey, String deviceName, String deviceSecret, String hostUrl, u_short port)
     : productKey(productKey),
       deviceName(deviceName),
@@ -7,21 +9,25 @@ IoTManager::IoTManager(String productKey, String deviceName, String deviceSecret
       hostUrl(hostUrl),
       port(port)
 {
-    this->brifeId = productKey + "." + deviceName;
+    this->briefId = productKey + "." + deviceName;
     this->username = deviceName + "&" + productKey;
+    IoTManager::instance = this;
 
-    char topicBuffer[256];
-    snprintf(topicBuffer, sizeof(topicBuffer), ALINK_TOPIC_PROP_POST, productKey.c_str(), deviceName.c_str());
+    char* topicBuffer = new char[MAX_TOPIC_SIZE];  // 动态分配缓冲区
+
+    snprintf(topicBuffer, MAX_TOPIC_SIZE, ALINK_TOPIC_PROP_POST, productKey.c_str(), deviceName.c_str());
     this->topicPropPost = String(topicBuffer);
 
-    snprintf(topicBuffer, sizeof(topicBuffer), ALINK_TOPIC_PROP_SET, productKey.c_str(), deviceName.c_str());
+    snprintf(topicBuffer, MAX_TOPIC_SIZE, ALINK_TOPIC_PROP_SET, productKey.c_str(), deviceName.c_str());
     this->topicPropSet = String(topicBuffer);
 
-    snprintf(topicBuffer, sizeof(topicBuffer), ALINK_TOPIC_EVENT, productKey.c_str(), deviceName.c_str());
+    snprintf(topicBuffer, MAX_TOPIC_SIZE, ALINK_TOPIC_EVENT, productKey.c_str(), deviceName.c_str());
     this->topicEvent = String(topicBuffer);
 
-    snprintf(topicBuffer, sizeof(topicBuffer), ALINK_TOPIC_USER, productKey.c_str(), deviceName.c_str());
+    snprintf(topicBuffer, MAX_TOPIC_SIZE, ALINK_TOPIC_USER, productKey.c_str(), deviceName.c_str());
     this->topicUser = String(topicBuffer);
+
+    delete[] topicBuffer;  // 释放动态分配的缓冲区
 }
 
 String IoTManager::sign(const char *plaintext)
@@ -70,25 +76,24 @@ bool IoTManager::connect()
 {
     String timestamp = String(timeManager.getTimestamp());
     char clientIdBuffer[256];
-    snprintf(clientIdBuffer, sizeof(clientIdBuffer), "%s|securemode=2,signmethod=hmacsha256,timestamp=%s|", brifeId.c_str(), timestamp.c_str());
+    snprintf(clientIdBuffer, sizeof(clientIdBuffer), "%s|securemode=2,signmethod=hmacsha256,timestamp=%s|", briefId.c_str(), timestamp.c_str());
     this->clientId = String(clientIdBuffer);
 
     char plainTextBuffer[256];
     snprintf(plainTextBuffer, sizeof(plainTextBuffer), "clientId%sdeviceName%sproductKey%s%s%s",
-             brifeId.c_str(), deviceName.c_str(), productKey.c_str(), "timestamp", timestamp.c_str());
+             briefId.c_str(), deviceName.c_str(), productKey.c_str(), "timestamp", timestamp.c_str());
     this->password = sign(plainTextBuffer);
     mqttClient.setServer(hostUrl.c_str(), port);
     mqttClient.setBufferSize(MAX_BUFFER_SIZE);
     mqttClient.setKeepAlive(KEEP_ALIVE_INTERVAL);
     mqttClient.setClient(wifiClient);
-    mqttClient.setCallback([this](char *topic, uint8_t *payload, unsigned int length)
-                           { this->callback(topic, payload, length); });
+    mqttClient.setCallback(IoTManager::mqttCallback);
     mqttClient.connect(clientId.c_str(), username.c_str(), password.c_str());
     if (mqttClient.connected())
     {
         logger.info("MQTT连接成功", "MQTT");
-        connectionCheckTicker.attach(CONNECTION_CHECK_INTERVAL, IoTManager::checkConnectionCallback,this);
-        queueCheckTicker.attach(MESSAGE_QUEUE_CHECK_INTERVAL, IoTManager::checkMessageQueueCallback,this);
+        connectionCheckTicker.attach(CONNECTION_CHECK_INTERVAL, IoTManager::checkConnectionCallback);
+        queueCheckTicker.attach(MESSAGE_QUEUE_CHECK_INTERVAL, IoTManager::checkMessageQueueCallback);
     }
     else
     {
@@ -408,10 +413,19 @@ void IoTManager::sendGenericPropetry(String payload)
     }
 }
 
-void IoTManager::checkConnectionCallback(IoTManager* iotManager){
-    iotManager->checkConnection();
+void IoTManager::checkConnectionCallback(){
+    if(IoTManager::instance){
+        IoTManager::instance->checkConnection();
+    }
 
 }
-void IoTManager::checkMessageQueueCallback(IoTManager* iotManager){
-    iotManager->checkMessageQueue();
+void IoTManager::checkMessageQueueCallback(){
+    if(IoTManager::instance){
+        IoTManager::instance->checkMessageQueue();
+    }
+}
+void IoTManager::mqttCallback(char *topic, byte *payload, unsigned int length){
+    if(IoTManager::instance){
+        IoTManager::instance->callback(topic, payload, length);
+    }
 }

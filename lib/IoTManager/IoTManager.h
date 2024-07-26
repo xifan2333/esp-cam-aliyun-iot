@@ -21,7 +21,7 @@ extern TimeManager timeManager;
 #define CONNECTION_CHECK_INTERVAL 10
 #define KEEP_ALIVE_INTERVAL 60
 #define MAX_BUFFER_SIZE 1024
-
+#define MAX_TOPIC_SIZE 512
 #define ALINK_BODY_FORMAT "{\"id\":\"123\",\"version\":\"1.0\",\"method\":\"thing.event.property.post\",\"params\":%s}"
 #define ALINK_EVENT_BODY_FORMAT "{\"id\": \"123\",\"version\": \"1.0\",\"params\": %s,\"method\": \"thing.event.%s.post\"}"
 #define ALINK_TOPIC_PROP_POST "/sys/%s/%s/thing/event/property/post"
@@ -51,6 +51,7 @@ struct CallbackEntry {
  */
 class IoTManager {
 public:
+    static IoTManager *instance;
     /**
      * @brief IoTManager 的构造函数。
      * @param productKey 设备的产品密钥。
@@ -203,12 +204,14 @@ public:
      * @return 如果移除成功返回 true，否则返回 false。
      */
     bool unbindData(String key);
-
+    static void checkMessageQueueCallback();
+    static void checkConnectionCallback();
+    static void mqttCallback(char *topic, byte *payload, unsigned int length);
 private:
     String productKey;
     String deviceName;
     String deviceSecret;
-    String brifeId;
+    String briefId;
     String username;
     String hostUrl;
     u_short port;
@@ -268,9 +271,7 @@ private:
      * @param Payload 消息负载。
      */
     void sendGenericPropetry(String Payload);
-
-    static void checkMessageQueueCallback(IoTManager *iotManager);
-    static void checkConnectionCallback(IoTManager *iotManager);
+   
 };
 
 #endif // IOTMANAGER_H
