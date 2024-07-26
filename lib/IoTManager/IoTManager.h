@@ -1,134 +1,277 @@
-/**
- * @file IoTManager.h
- * @brief 定义了 IoTManager 类，用于管理物联网设备的连接和数据通信。
- * 
- */
-
 #ifndef IOTMANAGER_H
 #define IOTMANAGER_H
 
+#include <vector>
 #include <Arduino.h>
-#include <WiFiClient.h>
 #include <ArduinoJson.h>
+#include <WiFiClient.h>
 #include <PubSubClient.h>
 #include "Logger.h"
 #include "TimeManager.h"
-#include <Crypto.h>
-#include <SHA256.h>
+#include <mbedtls/md.h>
+#include <Ticker.h>
+
+extern WiFiClient wifiClient;
+extern PubSubClient mqttClient;
+extern Logger logger;
+extern TimeManager timeManager;
 
 #define SHA256HMAC_SIZE 32
+#define MESSAGE_QUEUE_CHECK_INTERVAL 5
+#define CONNECTION_CHECK_INTERVAL 10
+#define KEEP_ALIVE_INTERVAL 60
+#define MAX_BUFFER_SIZE 1024
 
-extern WiFiClient wifiClient;    ///< 外部定义的 WiFi 客户端对象
-extern PubSubClient mqttClient;  ///< 外部定义的 MQTT 客户端对象
-extern Logger logger;            ///< 外部定义的日志记录器对象
-extern TimeManager timeManager;  ///< 外部定义的时间管理器对象
+#define ALINK_BODY_FORMAT "{\"id\":\"123\",\"version\":\"1.0\",\"method\":\"thing.event.property.post\",\"params\":%s}"
+#define ALINK_EVENT_BODY_FORMAT "{\"id\": \"123\",\"version\": \"1.0\",\"params\": %s,\"method\": \"thing.event.%s.post\"}"
+#define ALINK_TOPIC_PROP_POST "/sys/%s/%s/thing/event/property/post"
+#define ALINK_TOPIC_PROP_SET "/sys/%s/%s/thing/service/property/set"
+#define ALINK_TOPIC_USER "/sys/%s/%s/thing/event/user/%s"
+#define ALINK_TOPIC_GENERIC "/sys/%s/%s/thing/event/%s"
+#define ALINK_TOPIC_EVENT "/sys/%s/%s/thing/event"
+
+typedef void (*callbackFunction)(JsonVariant);
+
+struct PropertyMessage {
+    String key;
+    String value;
+};
+
+struct CallbackEntry {
+    String key;
+    callbackFunction callbackFn;
+};
 
 /**
- * ### IoT 管理器类
- * 
- * 该类负责管理物联网设备的连接和数据通信。
- * 
- * #### 属性
- * 
- * - `productKey`：物联网设备的产品标识符
- * - `deviceName`：物联网设备的名称
- * - `deviceSecret`：物联网设备的密钥
- * - `username`：MQTT 连接的用户名
- * - `password`：MQTT 连接的密码
- * - `clientId`：MQTT 客户端 ID
- * - `hostUrl`：MQTT 服务器地址
- * - `brifeId`：物联网设备的简短 ID
- * - `port`：MQTT 服务器端口号
- * 
- * #### 方法
- * 
- * - `IoTManager()`：构造函数
- * - `sign()`：使用 HMAC-SHA256 签名方法获取密码
- * - `connect()`：连接到 MQTT 服务器
- * - `checkConnection()`：检查 MQTT 连接状态
- * - `sendData()`：发送数据到 MQTT 服务器
+ * @class IoTManager
+ * @brief 管理 IoT 设备的连接、订阅和消息处理。
+ *
+ * IoTManager 类处理 MQTT 连接、属性和事件管理以及 IoT 设备的消息处理。
+ * 它使用各种回调来处理特定的消息类型和属性。
  */
 class IoTManager {
 public:
-    String productKey;   ///< 物联网设备的产品标识符
-    String deviceName;   ///< 物联网设备的名称
-    String deviceSecret; ///< 物联网设备的密钥
-    String username;     ///< MQTT 连接的用户名
-    String password;     ///< MQTT 连接的密码
-    String clientId;     ///< MQTT 客户端 ID
-    String hostUrl;      ///< MQTT 服务器地址
-    String brifeId;      ///< 物联网设备的简短 ID
-    u_short port;        ///< MQTT 服务器端口号
-    
     /**
-     * ### 构造函数
-     * 
-     * 初始化 IoTManager 对象并设置物联网设备的连接参数。
-     * 
-     * #### 参数
-     * 
-     * - `productKey`：产品标识符
-     * - `deviceName`：设备名称
-     * - `deviceSecret`：设备密钥
-     * - `hostUrl`：MQTT 服务器地址
-     * - `port`：MQTT 服务器端口号
+     * @brief IoTManager 的构造函数。
+     * @param productKey 设备的产品密钥。
+     * @param deviceName 设备名称。
+     * @param deviceSecret 设备密钥。
+     * @param hostUrl MQTT 代理的主机 URL。
+     * @param port MQTT 代理的端口。
      */
     IoTManager(String productKey, String deviceName, String deviceSecret, String hostUrl, u_short port);
 
     /**
-     * ### 使用 HMAC-SHA256 签名方法对文本进行签名
-     * 
-     * 使用设备密钥对指定文本进行 HMAC-SHA256 签名。
-     * 
-     * #### 参数
-     * 
-     * - `plaintext`：要签名的原始文本
-     * - `deviceSecret`：设备密钥
-     * 
-     * #### 返回
-     * 
-     * - String：签名后的字符串
+     * @brief 使用设备密钥通过 HMAC-SHA256 对明文消息进行签名。
+     * @param plaintext 要签名的明文消息。
+     * @return 签名后的消息（十六进制字符串）。
      */
-    String sign(String plaintext, String deviceSecret);
+    String sign(const char *plaintext);
 
     /**
-     * ### 连接到 MQTT 服务器
-     * 
-     * 尝试连接到预设的 MQTT 服务器，使用构造函数中提供的参数。
-     * 如果连接成功，将保持连接状态；如果连接失败，则记录错误日志。
-     * 
-     * #### 返回
-     * 
-     * - bool：连接成功返回 true，否则返回 false
+     * @brief 连接到 MQTT 代理。
+     * @return 如果连接成功返回 true，否则返回 false。
      */
     bool connect();
 
     /**
-     * ### 检查 MQTT 连接状态
-     * 
-     * 检查当前 MQTT 连接状态，若未连接则尝试重新连接。
-     * 如果连接成功，调用 MQTT 客户端的 loop 方法以保持连接。
+     * @brief 检查连接状态并在必要时重新连接。
      */
-    bool checkConnection();
+    void checkConnection();
 
     /**
-     * ### 发送数据到 MQTT 服务器
-     * 
-     * 将指定的键值对数据发送到 MQTT 服务器。
-     * 
-     * #### 参数
-     * 
-     * - `key`：数据的键
-     * - `value`：数据的值
-     */
-    void sendData(String key, String value);
-
-    /**
-     * ### MQTT 客户端循环
-     * 
-     * 如果断开则重连，保持 MQTT 客户端的连接状态。
+     * @brief 处理 MQTT 客户端循环以保持连接并处理消息。
      */
     void loop();
+
+    /**
+     * @brief 发布消息到指定的 MQTT 主题。
+     * @param topic 要发布的 MQTT 主题。
+     * @param payload 要发送的有效负载。
+     * @param retained 消息是否应该由代理保留。
+     * @return 如果发布成功返回 true，否则返回 false。
+     */
+    bool publish(String topic, String payload, bool retained);
+
+    /**
+     * @brief 发布消息到指定的 MQTT 主题。
+     * @param topic 要发布的 MQTT 主题。
+     * @param payload 要发送的有效负载。
+     * @return 如果发布成功返回 true，否则返回 false。
+     */
+    bool publish(String topic, String payload);
+
+    /**
+     * @brief 发布用户消息到指定的 MQTT 主题后缀。
+     * @param topicSuffix 主题后缀。
+     * @param payload 要发送的有效负载。
+     * @return 如果发布成功返回 true，否则返回 false。
+     */
+    bool publishUser(String topicSuffix, String payload);
+
+    /**
+     * @brief 订阅用户消息主题。
+     * @param topicSuffix 主题后缀。
+     * @param fp 回调函数。
+     * @return 如果订阅成功返回 true，否则返回 false。
+     */
+    bool subscribeUser(String topicSuffix, callbackFunction fp);
+
+    /**
+     * @brief 取消订阅用户消息主题。
+     * @param topicSuffix 主题后缀。
+     * @return 如果取消订阅成功返回 true，否则返回 false。
+     */
+    bool unsubscribeUser(String topicSuffix);
+
+    /**
+     * @brief 订阅指定的 MQTT 主题。
+     * @param topic 要订阅的 MQTT 主题。
+     * @param qos 服务质量（QoS）级别。
+     * @param fp 回调函数。
+     * @return 如果订阅成功返回 true，否则返回 false。
+     */
+    bool subscribe(String topic, uint8_t qos, callbackFunction fp);
+
+    /**
+     * @brief 订阅指定的 MQTT 主题。
+     * @param topic 要订阅的 MQTT 主题。
+     * @param fp 回调函数。
+     * @return 如果订阅成功返回 true，否则返回 false。
+     */
+    bool subscribe(String topic, callbackFunction fp);
+
+    /**
+     * @brief 取消订阅指定的 MQTT 主题。
+     * @param topic 要取消订阅的 MQTT 主题。
+     * @return 如果取消订阅成功返回 true，否则返回 false。
+     */
+    bool unsubscribe(String topic);
+
+    /**
+     * @brief 发送属性消息。
+     * @param key 属性的键。
+     * @param value 属性的值。
+     */
+    void sendProperty(String key, String value);
+
+    /**
+     * @brief 发送属性消息。
+     * @param key 属性的键。
+     * @param value 属性的值（整数）。
+     */
+    void sendProperty(String key, int value);
+
+    /**
+     * @brief 发送属性消息。
+     * @param key 属性的键。
+     * @param value 属性的值（浮点数）。
+     */
+    void sendProperty(String key, float value);
+
+    /**
+     * @brief 发送属性消息。
+     * @param key 属性的键。
+     * @param value 属性的值（双精度浮点数）。
+     */
+    void sendProperty(String key, double value);
+
+    /**
+     * @brief 发送事件消息。
+     * @param eventId 事件ID。
+     * @param param 事件参数。
+     */
+    void sendEvent(String eventId, String param);
+
+    /**
+     * @brief 发送事件消息。
+     * @param eventId 事件ID。
+     */
+    void sendEvent(String eventId);
+
+    /**
+     * @brief 添加属性的回调函数。
+     * @param key 属性的键。
+     * @param callbackFn 回调函数。
+     * @return 如果添加成功返回 true，否则返回 false。
+     */
+    bool bindData(String key, callbackFunction callbackFn);
+
+    /**
+     * @brief 移除属性的回调函数。
+     * @param key 属性的键。
+     * @return 如果移除成功返回 true，否则返回 false。
+     */
+    bool unbindData(String key);
+
+private:
+    String productKey;
+    String deviceName;
+    String deviceSecret;
+    String brifeId;
+    String username;
+    String hostUrl;
+    u_short port;
+    String clientId;
+    String password;
+    String topicPropPost;
+    String topicPropSet;
+    String topicEvent;
+    String topicUser;
+
+    std::vector<PropertyMessage> messageQueue; // 使用vector管理消息队列
+    std::vector<CallbackEntry> callbackArray; // 使用vector管理回调函数
+    Ticker queueCheckTicker;
+    Ticker connectionCheckTicker;
+
+    /**
+     * @brief 记录错误信息。
+     */
+    void logError();
+
+    /**
+     * @brief 处理收到的 MQTT 消息。
+     * @param topic 主题。
+     * @param payload 消息负载。
+     * @param length 消息长度。
+     */
+    void callback(char *topic, byte *payload, unsigned int length);
+
+    /**
+     * @brief 处理属性设置消息。
+     * @param jsonVariant JSON 变体。
+     */
+    void processPropertySetMessage(JsonVariant jsonVariant);
+
+    /**
+     * @brief 处理用户消息。
+     * @param topic 主题。
+     * @param jsonVariant JSON 变体。
+     */
+    void processUserMessage(const char *topic, JsonVariant jsonVariant);
+
+    /**
+     * @brief 处理通用消息。
+     * @param topic 主题。
+     * @param jsonVariant JSON 变体。
+     */
+    void processGenericMessage(const char *topic, JsonVariant jsonVariant);
+
+    /**
+     * @brief 检查消息队列。
+     */
+    void checkMessageQueue();
+
+
+    /**
+     * @brief 发送通用属性消息。
+     * @param Payload 消息负载。
+     */
+    void sendGenericPropetry(String Payload);
+
+    static void checkMessageQueueCallback(IoTManager *iotManager);
+    static void checkConnectionCallback(IoTManager *iotManager);
 };
 
 #endif // IOTMANAGER_H
+

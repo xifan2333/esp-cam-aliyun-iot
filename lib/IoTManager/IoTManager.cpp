@@ -1,157 +1,417 @@
-/**
- * @file IoTManager.cpp
- * @author 稀饭
- * @brief 实现了 IoTManager 类的方法，用于管理物联网设备连接及通信。
- */
 #include "IoTManager.h"
 
-/**
- * ### IoTManager 构造函数
- *
- * 初始化 IoTManager 对象并设置物联网设备的连接参数。
- *
- * #### 参数
- *
- * - `productKey`：产品标识符
- * - `deviceName`：设备名称
- * - `deviceSecret`：设备密钥
- * - `hostUrl`：MQTT 服务器地址
- * - `port`：MQTT 服务器端口号
- */
 IoTManager::IoTManager(String productKey, String deviceName, String deviceSecret, String hostUrl, u_short port)
+    : productKey(productKey),
+      deviceName(deviceName),
+      deviceSecret(deviceSecret),
+      hostUrl(hostUrl),
+      port(port)
 {
-    this->productKey = productKey;
-    this->deviceName = deviceName;
-    this->deviceSecret = deviceSecret;
     this->brifeId = productKey + "." + deviceName;
     this->username = deviceName + "&" + productKey;
-    this->hostUrl = hostUrl;
-    this->port = port;
+
+    char topicBuffer[256];
+    snprintf(topicBuffer, sizeof(topicBuffer), ALINK_TOPIC_PROP_POST, productKey.c_str(), deviceName.c_str());
+    this->topicPropPost = String(topicBuffer);
+
+    snprintf(topicBuffer, sizeof(topicBuffer), ALINK_TOPIC_PROP_SET, productKey.c_str(), deviceName.c_str());
+    this->topicPropSet = String(topicBuffer);
+
+    snprintf(topicBuffer, sizeof(topicBuffer), ALINK_TOPIC_EVENT, productKey.c_str(), deviceName.c_str());
+    this->topicEvent = String(topicBuffer);
+
+    snprintf(topicBuffer, sizeof(topicBuffer), ALINK_TOPIC_USER, productKey.c_str(), deviceName.c_str());
+    this->topicUser = String(topicBuffer);
 }
 
-/**
- * ### 使用 HMAC-SHA256 签名方法对文本进行签名
- *
- * 使用设备密钥对指定文本进行 HMAC-SHA256 签名。
- *
- * #### 参数
- *
- * - `plaintext`：要签名的原始文本
- * - `deviceSecret`：设备密钥
- *
- * #### 返回
- *
- * - String：签名后的字符串
- */
-String IoTManager::sign(String plaintext, String deviceSecret)
+String IoTManager::sign(const char *plaintext)
 {
-    byte hashCode[SHA256HMAC_SIZE];
-    SHA256 sha256;
+   
 
+   // 转换字符串到 C 样式的 char 数组
     const char *key = deviceSecret.c_str();
     size_t keySize = deviceSecret.length();
+    uint8_t *sign = new uint8_t[32]; // SHA-256 produces a 32-byte hash
 
-    sha256.resetHMAC(key, keySize);
-    sha256.update((const byte *)plaintext.c_str(), plaintext.length());
-    sha256.finalizeHMAC(key, keySize, hashCode, sizeof(hashCode));
+    // 初始化 mbedTLS HMAC 上下文
+    mbedtls_md_context_t ctx;
+    const mbedtls_md_info_t *md_info = mbedtls_md_info_from_type(MBEDTLS_MD_SHA256);
 
-    String sign = "";
-    for (byte i = 0; i < SHA256HMAC_SIZE; ++i)
-    {
-        sign += "0123456789ABCDEF"[hashCode[i] >> 4];
-        sign += "0123456789ABCDEF"[hashCode[i] & 0xf];
+    mbedtls_md_init(&ctx);
+    mbedtls_md_setup(&ctx, md_info, 1);
+
+    // 开始 HMAC 计算
+    mbedtls_md_hmac_starts(&ctx, (const unsigned char *)key, keySize);
+
+    // 输入数据进行 HMAC 计算
+    mbedtls_md_hmac_update(&ctx, (const unsigned char *)plaintext, strlen(plaintext));
+
+    // 完成 HMAC 计算并获取结果
+    mbedtls_md_hmac_finish(&ctx, sign);
+
+    // 释放 mbedTLS HMAC 上下文
+    mbedtls_md_free(&ctx);
+
+    // 将 HMAC 签名转换为十六进制字符串
+    char hexSign[32 * 2 + 1];
+    for (int i = 0; i < 32; i++) {
+        sprintf(&hexSign[i * 2], "%02x", sign[i]);
     }
+    hexSign[32 * 2] = '\0';
 
-    return sign;
+    // 清理内存
+    delete[] sign;
+
+    String result = String(hexSign);
+    return result;
 }
 
-/**
- * ### 连接到 MQTT 服务器
- *
- * 使用设定的连接参数连接到 MQTT 服务器。
- *
- * #### 返回
- *
- * - bool：连接成功返回 true，否则返回 false
- */
 bool IoTManager::connect()
 {
     String timestamp = String(timeManager.getTimestamp());
-    logger.info("当前时间戳：" + timestamp, "MQTT");
-    this->clientId = brifeId + "|securemode=2,signmethod=hmacsha256,timestamp=" + timestamp + "|";
-    String plainText = "clientId" + brifeId + "deviceName" + deviceName + "productKey" + productKey + "timestamp" + timestamp;
-    this->password = sign(plainText, deviceSecret);
+    char clientIdBuffer[256];
+    snprintf(clientIdBuffer, sizeof(clientIdBuffer), "%s|securemode=2,signmethod=hmacsha256,timestamp=%s|", brifeId.c_str(), timestamp.c_str());
+    this->clientId = String(clientIdBuffer);
+
+    char plainTextBuffer[256];
+    snprintf(plainTextBuffer, sizeof(plainTextBuffer), "clientId%sdeviceName%sproductKey%s%s%s",
+             brifeId.c_str(), deviceName.c_str(), productKey.c_str(), "timestamp", timestamp.c_str());
+    this->password = sign(plainTextBuffer);
     mqttClient.setServer(hostUrl.c_str(), port);
+    mqttClient.setBufferSize(MAX_BUFFER_SIZE);
+    mqttClient.setKeepAlive(KEEP_ALIVE_INTERVAL);
     mqttClient.setClient(wifiClient);
+    mqttClient.setCallback([this](char *topic, uint8_t *payload, unsigned int length)
+                           { this->callback(topic, payload, length); });
     mqttClient.connect(clientId.c_str(), username.c_str(), password.c_str());
     if (mqttClient.connected())
     {
         logger.info("MQTT连接成功", "MQTT");
+        connectionCheckTicker.attach(CONNECTION_CHECK_INTERVAL, IoTManager::checkConnectionCallback,this);
+        queueCheckTicker.attach(MESSAGE_QUEUE_CHECK_INTERVAL, IoTManager::checkMessageQueueCallback,this);
     }
     else
     {
-        String errorMsg;
-        switch (mqttClient.state())
-        {
-            case -4:
-                errorMsg = "MQTT连接失败: 没有可用的网络";
-                break;
-            case -3:
-                errorMsg = "MQTT连接失败: DNS解析失败";
-                break;
-            case -2:
-                errorMsg = "MQTT连接失败: 连接被拒绝";
-                break;
-            case -1:
-                errorMsg = "MQTT连接失败: 客户端配置错误";
-                break;
-            case 0:
-                errorMsg = "MQTT连接失败: 连接被拒绝(未知原因)";
-                break;
-            case 1:
-                errorMsg = "MQTT连接失败: 连接被拒绝(不支持的协议版本)";
-                break;
-            case 2:
-                errorMsg = "MQTT连接失败: 连接被拒绝(非法客户端标识符)";
-                break;
-            case 3:
-                errorMsg = "MQTT连接失败: 连接被拒绝(服务器不可用)";
-                break;
-            case 4:
-                errorMsg = "MQTT连接失败: 连接被拒绝(无效用户名或密码)";
-                break;
-            case 5:
-                errorMsg = "MQTT连接失败: 连接被拒绝(未授权)";
-                break;
-            default:
-                errorMsg = "MQTT连接失败: 未知错误(" + String(mqttClient.state()) + ")";
-                break;
-        }
-        logger.error(errorMsg, "MQTT");
+        logError();
     }
     return mqttClient.connected();
 }
 
-/**
- * ### 检查 MQTT 连接状态
- *
- * 检查当前 MQTT 连接状态，若未连接则尝试重新连接。
- * 
- * ### 返回值
- * 
- * - bool：连接成功返回 true，否则返回 false
- */
-bool IoTManager::checkConnection()
+void IoTManager::checkConnection()
 {
-    return mqttClient.connected();
-}
-
-void IoTManager::loop(){
-
     if (!mqttClient.connected())
     {
+        logError();
         logger.info("MQTT连接断开，尝试重新连接……", "MQTT");
         connect();
     }
+}
+
+void IoTManager::loop()
+{
     mqttClient.loop();
+}
+
+bool IoTManager::publish(String topic, String payload, bool retained)
+{
+    return mqttClient.publish(topic.c_str(), payload.c_str(), retained);
+}
+
+bool IoTManager::publish(String topic, String payload)
+{
+    return mqttClient.publish(topic.c_str(), payload.c_str());
+}
+
+bool IoTManager::publishUser(String topicSuffix, String payload)
+{
+    char topic[150];
+    strcpy(topic, topicUser.c_str());
+    return publish(String(strcat(topic, topicSuffix.c_str())), payload);
+}
+
+bool IoTManager::subscribeUser(String topicSuffix, callbackFunction fp)
+{
+    char *topic = new char[150];
+    strcpy(topic, topicUser.c_str());
+    return subscribe(String(strcat(topic, topicSuffix.c_str())), fp);
+}
+
+bool IoTManager::unsubscribeUser(String topicSuffix)
+{
+    char *topic = new char[150];
+    strcpy(topic, topicUser.c_str());
+    return unsubscribe(String(strcat(topic, topicSuffix.c_str())));
+}
+
+bool IoTManager::subscribe(String topic, uint8_t qos, callbackFunction fp)
+{
+    bool ret = false;
+    if (mqttClient.subscribe(topic.c_str(), qos))
+    {
+        ret = true;
+        bindData(topic, fp);
+        logger.info("订阅: " + topic, "MQTT");
+    }
+    return ret;
+}
+
+bool IoTManager::unsubscribe(String topic)
+{
+    bool ret = false;
+    if (mqttClient.unsubscribe(topic.c_str()))
+    {
+        ret = true;
+        unbindData(topic);
+        logger.info("取消订阅: " + topic, "MQTT");
+    }
+    return ret;
+}
+
+void IoTManager::sendProperty(String key, String value)
+{
+    PropertyMessage msg = {key, value};
+    messageQueue.push_back(msg);
+}
+
+void IoTManager::sendProperty(String key, int value)
+{
+    PropertyMessage msg = {key, String(value)};
+    messageQueue.push_back(msg);
+}
+void IoTManager::sendProperty(String key, float value)
+{
+    PropertyMessage msg = {key, String(value)};
+    messageQueue.push_back(msg);
+}
+
+void IoTManager::sendProperty(String key, double value)
+{
+    PropertyMessage msg = {key, String(value)};
+    messageQueue.push_back(msg);
+}
+void IoTManager::sendEvent(String eventId, String parameters)
+{
+    char topicPath[156];
+    snprintf(topicPath, sizeof(topicPath), "%s/%s/post", topicEvent.c_str(), eventId.c_str());
+
+    char jsonPayload[1024];
+    snprintf(jsonPayload, sizeof(jsonPayload), ALINK_EVENT_BODY_FORMAT, parameters.c_str(), eventId.c_str());
+
+    logger.info("发送事件 " + String(topicPath) + " " + String(jsonPayload), "MQTT");
+
+    bool publishSuccess = mqttClient.publish(topicPath, jsonPayload);
+    if (publishSuccess)
+    {
+        logger.info("MQTT事件发送成功: " + String(jsonPayload), "MQTT");
+    }
+    else
+    {
+        logger.error("MQTT事件发送失败: " + String(jsonPayload), "MQTT");
+    }
+}
+
+void IoTManager::sendEvent(String eventId)
+{
+    sendEvent(eventId, "{}");
+}
+
+bool IoTManager::bindData(String key, callbackFunction callbackFn)
+{
+    if (key == NULL || callbackFn == NULL)
+    {
+        return false;
+    }
+    for (auto &entry : callbackArray)
+    {
+        if (entry.callbackFn == nullptr)
+        {
+            entry.key = key;
+            entry.callbackFn = callbackFn;
+            return true;
+        }
+    }
+
+    callbackArray.push_back({key, callbackFn});
+    return true;
+}
+
+bool IoTManager::unbindData(String key)
+{
+    for (auto it = callbackArray.begin(); it != callbackArray.end();)
+    {
+        if (it->key == key)
+        {
+            it = callbackArray.erase(it);
+            return true;
+        }
+        else
+        {
+            it++;
+        }
+    }
+    return false;
+}
+
+void IoTManager::logError()
+{
+    String errorMsg;
+    int state = mqttClient.state();
+
+    switch (state)
+    {
+    case MQTT_CONNECTION_TIMEOUT:
+        errorMsg = "MQTT连接失败: 连接超时";
+        break;
+    case MQTT_CONNECTION_LOST:
+        errorMsg = "MQTT连接失败: 连接丢失";
+        break;
+    case MQTT_CONNECT_FAILED:
+        errorMsg = "MQTT连接失败: 连接请求失败";
+        break;
+    case MQTT_DISCONNECTED:
+        errorMsg = "MQTT连接失败: 已断开连接";
+        break;
+    case MQTT_CONNECT_BAD_PROTOCOL:
+        errorMsg = "MQTT连接失败: 不支持的协议版本";
+        break;
+    case MQTT_CONNECT_BAD_CLIENT_ID:
+        errorMsg = "MQTT连接失败: 不合格的客户端标识符";
+        break;
+    case MQTT_CONNECT_UNAVAILABLE:
+        errorMsg = "MQTT连接失败: 服务器不可用";
+        break;
+    case MQTT_CONNECT_BAD_CREDENTIALS:
+        errorMsg = "MQTT连接失败: 无效的用户名或密码";
+        break;
+    case MQTT_CONNECT_UNAUTHORIZED:
+        errorMsg = "MQTT连接失败: 未授权";
+        break;
+    default:
+        errorMsg = "MQTT连接失败: 未知错误";
+        break;
+    }
+    logger.error(errorMsg, "MQTT");
+}
+
+void IoTManager::callback(char *topic, byte *payload, unsigned int length)
+{
+    // 使用静态缓冲区
+    static char payloadBuffer[1024];
+
+    if (length >= sizeof(payloadBuffer))
+    {
+        logger.error("接收到超大消息负载，无法处理", "MQTT");
+        return;
+    }
+
+    // 将消息负载添加 null 结尾并复制到缓冲区中
+    memcpy(payloadBuffer, payload, length);
+    payloadBuffer[length] = '\0';
+
+    logger.info("收到 MQTT 消息 [" + String(topic) + "] " + payloadBuffer, "MQTT");
+
+    // 根据实际负载大小选择合适的静态JSON文档
+
+    JsonDocument doc;
+    DeserializationError parseError = deserializeJson(doc, payloadBuffer);
+
+    if (parseError)
+    {
+        logger.error("JSON 解析失败", "MQTT");
+        return;
+    }
+    JsonVariant jsonVariant = doc.as<JsonVariant>();
+
+    if (strstr(topic, topicPropSet.c_str()))
+    {
+        processPropertySetMessage(jsonVariant);
+    }
+    else if (strstr(topic, topicUser.c_str()))
+    {
+        processUserMessage(topic, jsonVariant);
+    }
+    else
+    {
+        processGenericMessage(topic, jsonVariant);
+    }
+}
+
+void IoTManager::processPropertySetMessage(JsonVariant jsonVariant)
+{
+    for (const auto &callbackEntry : callbackArray)
+    {
+        if (!callbackEntry.key.isEmpty())
+        {
+            bool keyExists = jsonVariant["params"].containsKey(callbackEntry.key.c_str());
+            if (keyExists)
+            {
+                callbackEntry.callbackFn(jsonVariant["params"][callbackEntry.key.c_str()]);
+            }
+        }
+    }
+}
+
+void IoTManager::processUserMessage(const char *topic, JsonVariant jsonVariant)
+{
+    for (const auto &callbackEntry : callbackArray)
+    {
+        if (!callbackEntry.key.isEmpty() && callbackEntry.key == topic)
+        {
+            callbackEntry.callbackFn(jsonVariant);
+        }
+    }
+}
+
+void IoTManager::processGenericMessage(const char *topic, JsonVariant jsonVariant)
+{
+    for (const auto &callbackEntry : callbackArray)
+    {
+        if (!callbackEntry.key.isEmpty() && callbackEntry.key == topic)
+        {
+            callbackEntry.callbackFn(jsonVariant);
+        }
+    }
+}
+
+void IoTManager::checkMessageQueue()
+{
+    for (auto it = messageQueue.begin(); it != messageQueue.end();)
+    {
+        JsonDocument doc;
+        JsonObject root = doc.to<JsonObject>();
+        root["id"] = String(timeManager.getTimestamp());
+        root["version"] = "1.0";
+        root["params"][it->key] = it->value;
+
+        String payloadStr;
+        serializeJson(root, payloadStr);
+
+        sendGenericPropetry(payloadStr.c_str());
+
+        // 清空已发送的消息
+        it = messageQueue.erase(it);
+    }
+}
+
+void IoTManager::sendGenericPropetry(String payload)
+{
+    bool success = mqttClient.publish(topicPropPost.c_str(), payload.c_str(), false);
+    logger.info("发送属性 " + topicPropPost + " " + payload, "MQTT");
+    if (success)
+    {
+        logger.info("MQTT属性发送成功: " + String(payload), "MQTT");
+    }
+    else
+    {
+        logError();
+        logger.error("MQTT属性发送失败: " + String(payload), "MQTT");
+    }
+}
+
+void IoTManager::checkConnectionCallback(IoTManager* iotManager){
+    iotManager->checkConnection();
+
+}
+void IoTManager::checkMessageQueueCallback(IoTManager* iotManager){
+    iotManager->checkMessageQueue();
 }

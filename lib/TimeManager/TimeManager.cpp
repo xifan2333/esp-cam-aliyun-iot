@@ -60,8 +60,8 @@ uint_fast64_t TimeManager::getTimestamp()
 {
     struct timeval tv;
     gettimeofday(&tv, NULL);
-    unsigned long long timestamp =
-        (unsigned long long)(tv.tv_sec) * 1000 + (unsigned long long)(tv.tv_usec) / 1000;
+    uint_fast64_t timestamp =
+        (uint_fast64_t)(tv.tv_sec) * 1000 + (uint_fast64_t)(tv.tv_usec) / 1000;
     return timestamp;
 }
 
